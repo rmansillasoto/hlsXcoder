@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="es">
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv='cache-control' content='no-cache,no-store,must-revalidate'>
+    <meta http-equiv='expires' content='0'>
+    <meta http-equiv='pragma' content='no-cache'>
+    <link rel="shortcut icon" type="image/png" href="./img/overon.png"/>
+    <title>Overon</title>
+    <link href="./styles/video-js.min.css" rel="stylesheet">
+    <link href="./styles/style.css" rel="stylesheet">
+    <link href="./styles/videojs-http-source-selector.css" rel="stylesheet">
+
+</head>
+
+<body>
+<div class="wrapper">
+    <div class="videowrapper" style="width:{{.RWidth}}px;height:{{.RHeight}}px;">
+        <div class="videocontent">
+            <video id="videoplayer" width=960 height=540
+                   class="video-js vjs-default-skin vjs-16-9 vjs-big-play-centered" controls autoplay preload="auto">
+                <source src="{{.HlsUrl}}" type="application/x-mpegURL">
+            </video>
+            <canvas id="vumeter" width="60" height="130" style="display: {{.Vumeter}};"></canvas>
+        </div>          
+    </div>
+
+</div>
+<script src="./js/video.min.js"></script>
+<script src="./js/customComponents.js"></script>
+<script src="./js/main.js"></script>
+
+</body>
+
+</html>

@@ -1,0 +1,247 @@
+FROM    nvidia/cudagl:9.2-devel-ubuntu18.04 
+
+ENV         NVIDIA_DRIVER_CAPABILITIES compat32,compute,video
+WORKDIR     /root/
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN     apt-get -yqq update && \
+        apt-get install -yq --no-install-recommends ca-certificates expat libgomp1 libxcb-shape0-dev && \
+        apt-get autoremove -y && \
+        apt-get clean -y
+
+#//FROM  devel-base as build
+
+ENV        NVIDIA_HEADERS_VERSION=9.1.23.1 
+ARG        PKG_CONFIG_PATH=/opt/ffmpeg/lib/pkgconfig
+ENV        LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/opt/ffmpeg/lib"
+ARG        PREFIX=/opt/ffmpeg
+ARG        MAKEFLAGS="-j12"
+
+ENV         FDKAAC_VERSION=2.0.1 \
+            FONTCONFIG_VERSION=2.12.4 \
+            FREETYPE_VERSION=2.5.5 \
+            FRIBIDI_VERSION=0.19.7 \
+            LIBASS_VERSION=0.14.0 \
+            X264_VERSION=20191217-2245-stable \ 
+            X265_VERSION=3.2.1 \
+            SRC=/usr/local
+
+##FFMPEG_VERSION=4.2.2 \            
+##NVIDIA HEADERS 8.1.24.9
+##FFMPEG 4.2.1
+##x264 20191217-2245-stable
+##x265 3.2.1
+##FDKAAC 0.1.5
+##LIBASS 0.13.7
+
+
+ARG         FREETYPE_SHA256SUM="5d03dd76c2171a7601e9ce10551d52d4471cf92cd205948e60289251daddffa8 freetype-2.5.5.tar.gz"
+ARG         FRIBIDI_SHA256SUM="3fc96fa9473bd31dcb5500bdf1aa78b337ba13eb8c301e7c28923fea982453a8 0.19.7.tar.gz"
+##ARG         LIBASS_SHA256SUM="8fadf294bf701300d4605e6f1d92929304187fca4b8d8a47889315526adbafd7 0.13.7.tar.gz"
+
+RUN      buildDeps="autoconf \
+                    automake \
+                    cmake \
+                    curl \
+                    bzip2 \
+                    libexpat1-dev \
+                    g++ \
+                    gcc \
+                    git \
+                    gperf \
+                    libtool \
+                    make \
+                    nasm \
+                    perl \
+                    pkg-config \
+                    python \
+                    libssl-dev \
+                    yasm \
+                    libzvbi-dev \
+                    ttf-dejavu \
+                    libssl-dev \
+                    tclsh \
+                    zlib1g-dev" && \
+        apt-get -yqq update && \
+        apt-get install -yq --no-install-recommends ${buildDeps} 
+
+RUN \
+        DIR=/root/nv-codec-headers && \
+        git clone https://git.videolan.org/git/ffmpeg/nv-codec-headers.git ${DIR} && \
+        cd ${DIR} && \
+        git checkout n${NVIDIA_HEADERS_VERSION} && \
+        sed -i 's@/usr/local@'"$PREFIX"'@' Makefile && \
+        make && \
+        make install  && \
+        rm -rf ${DIR}
+
+## x264 http://www.videolan.org/developers/x264.html
+RUN \
+        DIR=/root/x264 && \
+        mkdir -p ${DIR} && \
+        cd ${DIR} && \
+        curl -sL https://download.videolan.org/pub/videolan/x264/snapshots/x264-snapshot-${X264_VERSION}.tar.bz2 | \
+        tar -jx --strip-components=1 && \
+        ./configure --prefix="${PREFIX}" --enable-shared --enable-pic --disable-cli && \
+        make && \
+        make install && \
+        rm -rf ${DIR}
+
+### x265 http://x265.org/
+RUN \
+        DIR=/root/x265 && \
+        mkdir -p ${DIR} && \
+        cd ${DIR} && \
+        curl -sL https://download.videolan.org/pub/videolan/x265/x265_${X265_VERSION}.tar.gz  | \
+        tar -zx && \
+        cd x265_${X265_VERSION}/build/linux && \
+        sed -i "/-DEXTRA_LIB/ s/$/ -DCMAKE_INSTALL_PREFIX=\${PREFIX}/" multilib.sh && \
+        sed -i "/^cmake/ s/$/ -DENABLE_CLI=OFF/" multilib.sh && \
+        ./multilib.sh && \
+        make -C 8bit install && \
+        rm -rf ${DIR}
+
+### fdk-aac https://github.com/mstorsjo/fdk-aac
+RUN \
+        DIR=/root/fdk-aac && \
+        mkdir -p ${DIR} && \
+        cd ${DIR} && \
+        curl -sL https://github.com/mstorsjo/fdk-aac/archive/v${FDKAAC_VERSION}.tar.gz | \
+        tar -zx --strip-components=1 && \
+        autoreconf -fiv && \
+        ./configure --prefix="${PREFIX}" --enable-shared --datadir="${DIR}" && \
+        make && \
+        make install && \
+        rm -rf ${DIR}
+
+## freetype https://www.freetype.org/
+RUN  apt-get install -y libfreetype6-dev
+
+## fridibi https://www.fribidi.org/
+# + https://github.com/fribidi/fribidi/issues/8
+RUN  \
+        DIR=/root/fribidi && \
+        mkdir -p ${DIR} && \
+        cd ${DIR} && \
+        curl -sLO https://github.com/fribidi/fribidi/archive/${FRIBIDI_VERSION}.tar.gz && \
+        echo ${FRIBIDI_SHA256SUM} | sha256sum --check && \
+        tar -zx --strip-components=1 -f ${FRIBIDI_VERSION}.tar.gz && \
+        sed -i 's/^SUBDIRS =.*/SUBDIRS=gen.tab charset lib/' Makefile.am && \
+        ./bootstrap --no-config && \
+        ./configure -prefix="${PREFIX}" --disable-static --enable-shared && \
+        make -j 1 && \
+        make install && \
+        rm -rf ${DIR}
+
+## fontconfig https://www.freedesktop.org/wiki/Software/fontconfig/
+RUN  \
+        DIR=/root/fontconfig && \
+        mkdir -p ${DIR} && \
+        cd ${DIR} && \
+        curl -sLO https://www.freedesktop.org/software/fontconfig/release/fontconfig-${FONTCONFIG_VERSION}.tar.bz2 &&\
+        tar -jx --strip-components=1 -f fontconfig-${FONTCONFIG_VERSION}.tar.bz2 && \
+        ./configure -prefix="${PREFIX}" --disable-static --enable-shared && \
+        make && \
+        make install && \
+        rm -rf ${DIR}
+
+## libass https://github.com/libass/libass
+RUN  \
+        DIR=/root/libass && \
+        mkdir -p ${DIR} && \
+        cd ${DIR} && \
+        curl -sLO https://github.com/libass/libass/archive/${LIBASS_VERSION}.tar.gz &&\
+        ##echo ${LIBASS_SHA256SUM} | sha256sum --check && \
+        tar -zx --strip-components=1 -f ${LIBASS_VERSION}.tar.gz && \
+        ./autogen.sh && \
+        ./configure -prefix="${PREFIX}" --disable-static --enable-shared && \
+        make && \
+        make install && \
+        rm -rf ${DIR}
+
+### SRT https://github.com/Haivision/srt.git
+RUN \
+	DIR=/root/srt && \
+	mkdir -p ${DIR} && \
+        cd ${DIR} && \
+	git clone --depth 1 https://github.com/Haivision/srt.git && \
+	mkdir srt/build && \
+	cd srt/build && \
+	#cmake -DCMAKE_INSTALL_PREFIX="/opt/ffmpeg" -DENABLE_SHARED="OFF" -DENABLE_C_DEPS="ON" .. && \
+        PKG_CONFIG_PATH="/opt/ffmpeg/lib/pkgconfig" cmake -DCMAKE_INSTALL_BINDIR="/opt/ffmpeg/bin" -DCMAKE_INSTALL_INCLUDEDIR="/opt/ffmpeg/include" -DCMAKE_INSTALL_LIBDIR="/opt/ffmpeg/lib" -DCMAKE_INSTALL_PREFIX="/opt/ffmpeg/" -DENABLE_SHARED="OFF" -DENABLE_C_DEPS="ON" .. && \
+        make && \
+	make install && \
+	rm -rf ${DIR}
+
+## ffmpeg https://ffmpeg.org/
+COPY ffmpeg/ ./ffmpeg
+
+RUN \
+        DIR=/root/ffmpeg && cd ${DIR} && \
+        LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu && \
+        PKG_CONFIG_PATH="/opt/ffmpeg/lib/pkgconfig" ./configure \
+        --disable-debug \
+        --disable-doc \
+        --disable-ffplay \
+        --enable-nvenc \
+        --enable-libnpp \
+        --enable-cuvid \
+        --disable-shared \
+        --enable-avresample \
+        --enable-gpl \
+        --enable-pthreads \
+        --enable-libass \
+        --enable-libfreetype \
+        --enable-libx265 \
+        --enable-libx264 \
+        --enable-nonfree \
+        --enable-openssl \
+        --enable-libfdk_aac \
+        --enable-libzvbi \
+        --enable-postproc \
+        --enable-small \
+        --enable-version3 \
+        --enable-libsrt \
+        --extra-cflags="-I${PREFIX}/include -I${PREFIX}/include/ffnvcodec -I/usr/local/cuda/include/" \
+        --extra-ldflags="-L${PREFIX}/lib -L/usr/local/cuda/lib64/ -L/usr/local/cuda/lib32/" \
+        --extra-libs=-ldl \
+        --pkg-config-flags="--static" \
+        --cc="gcc -m64 -fPIC" \
+        --prefix="${PREFIX}" && \
+        make && \
+        make install && \
+        make distclean && \
+        hash -r && \
+        cd tools && \
+        make qt-faststart && \
+        cp qt-faststart ${PREFIX}/bin
+
+## cleanup
+RUN \
+        ldd ${PREFIX}/bin/ffmpeg | grep opt/ffmpeg | cut -d ' ' -f 3 | xargs -i cp {} /usr/local/lib/ && \
+        cp ${PREFIX}/bin/* /usr/local/bin/ && \
+        cp -r ${PREFIX}/share/ffmpeg /usr/local/share/ && \
+        LD_LIBRARY_PATH=/usr/local/lib ffmpeg -buildconf
+
+
+ENV  LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/local/lib"
+
+#COPY --from=build /usr/local/bin ./usr/local/bin/
+#COPY --from=build /usr/local/share ./usr/local/share/
+#COPY --from=build /usr/local/lib ./usr/local/lib/
+
+# Let's make sure the app built correctly
+# Convenient to verify on https://hub.docker.com/r/jrottenberg/ffmpeg/builds/ console output
+###PLAYER COMPILATION
+
+###GO
+
+WORKDIR /root
+RUN curl -O https://storage.googleapis.com/golang/go1.11.2.linux-amd64.tar.gz && tar -C /usr/local/ -xzf go1.11.2.linux-amd64.tar.gz && \
+    export GOPATH=$PWD:/$USER/go && export PATH="/usr/local/go/bin:$PATH" && go version
+
+###YOUTUBEDL
+
+RUN curl -L https://yt-dl.org/downloads/latest/youtube-dl -o /usr/local/bin/youtube-dl && \
+    chmod a+rx /usr/local/bin/youtube-dl

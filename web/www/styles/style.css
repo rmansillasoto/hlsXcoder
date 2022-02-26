@@ -1,0 +1,35 @@
+.vjs-text-track-display>div>div:not(:last-child){
+    display: none;
+}
+.vjs-text-track-display>div>div:last-child{
+    top: 87%!important;
+    bottom: 0px!important;
+}
+.videocontent{
+    max-width: 1280px;
+    margin: auto;
+    position:relative;
+}
+.wrapper{
+    margin: auto;
+    max-height: 80vh;
+    position:relative;
+}
+.videowrapper{
+    margin: auto;
+    position:relative;
+}
+
+#vumeter{
+    position: absolute;
+    right: 0.5em;
+    bottom: 2.0em;
+    height: 120%;
+    max-height: 120%;
+    max-width: 10%;
+    z-index: 1;
+    width: 5em;
+}
+.vjs-menu{
+    z-index:2;
+}
