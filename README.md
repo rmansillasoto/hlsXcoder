@@ -1,5 +1,7 @@
 # hlsXcoder (Go)
 
+[![License: MPL 2.0](https://img.shields.io/badge/License-MPL_2.0-brightgreen.svg)](https://opensource.org/licenses/MPL-2.0)
+
 You can take any IP input and convert it to HLS. The container itself has it´s own CDN (https is by default) so you can serve the stream from the container. It has a built-in player that can show vumeters, subtitles (also DVB subs) and audios. It supports NVENC h264 or h265, deinterlace and resize. 
 
 Create the Dockerfile.base container first, then build Dockerfile...
